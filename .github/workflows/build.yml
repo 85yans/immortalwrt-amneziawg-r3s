@@ -17,9 +17,10 @@ jobs:
           tar -xf immortalwrt-sdk-rockchip-armv8_*.tar.xz
           mv immortalwrt-sdk-rockchip-armv8* sdk
 
-      - name: Fix kernel version
+      - name: Fix kernel version (hard lock to 6.6.110)
         run: |
           sed -i 's/^\(LINUX_VERSION-6.6 =\).*/\1 6.6.110/' sdk/include/kernel-version.mk
+          sed -i 's/^\(LINUX_KERNEL_HASH-6.6.110 =\).*/\1 skip/' sdk/include/kernel-version.mk
 
       - name: Copy AmneziaWG package
         run: |
@@ -39,17 +40,30 @@ jobs:
           echo "CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y" >> .config
           echo "CONFIG_PACKAGE_kmod-amneziawg=y" >> .config
           echo "CONFIG_PACKAGE_amneziawg=y" >> .config
+          echo "CONFIG_PACKAGE_amneziawg-tools=y" >> .config
+          echo "CONFIG_PACKAGE_luci-proto-amneziawg=y" >> .config
           make defconfig
 
-      - name: Build AmneziaWG
+      - name: Build all AmneziaWG packages
         run: |
           cd sdk
-          make package/kernel/kmod-amneziawg/compile V=s
           make package/amneziawg/compile V=s
+          make package/kernel/kmod-amneziawg/compile V=s
+          make package/amneziawg-tools/compile V=s || true
+          make package/luci-proto-amneziawg/compile V=s || true
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Prepare release files
+        run: |
+          mkdir release
+          find sdk/bin/packages -name "*.ipk" -exec cp {} release/ \;
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: amneziawg-ipk
-          path: |
-            sdk/bin/packages/aarch64_generic/base/*.ipk
+          tag_name: amneziawg-r3s-${{ github.run_number }}
+          name: "AmneziaWG for NanoPi R3S (build ${{ github.run_number }})"
+          draft: false
+          prerelease: false
+          files: release/*.ipk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
