@@ -11,9 +11,9 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Download ImmortalWrt SDK
+      - name: Download ImmortalWrt snapshot SDK
         run: |
-          wget https://downloads.immortalwrt.org/releases/24.10.4/targets/rockchip/armv8/immortalwrt-sdk-rockchip-armv8_gcc-12.3.0_musl.Linux-x86_64.tar.xz
+          wget https://downloads.immortalwrt.org/snapshots/targets/rockchip/armv8/immortalwrt-sdk-rockchip-armv8_gcc-12.3.0_musl.Linux-x86_64.tar.xz
           tar -xf immortalwrt-sdk-rockchip-armv8_*.tar.xz
           mv immortalwrt-sdk-rockchip-armv8* sdk
 
@@ -47,8 +47,8 @@ jobs:
       - name: Build all AmneziaWG packages
         run: |
           cd sdk
-          make package/amneziawg/compile V=s
           make package/kernel/kmod-amneziawg/compile V=s
+          make package/amneziawg/compile V=s
           make package/amneziawg-tools/compile V=s || true
           make package/luci-proto-amneziawg/compile V=s || true
 
