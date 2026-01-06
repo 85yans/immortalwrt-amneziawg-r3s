@@ -11,12 +11,13 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Download ImmortalWrt SDK (.tar.zst)
+      - name: Download and extract ImmortalWrt SDK (.tar.zst)
         run: |
           FILE="immortalwrt-sdk-24.10.4-rockchip-armv8_gcc-13.3.0_musl.Linux-x86_64.tar.zst"
           wget "https://downloads.immortalwrt.org/releases/24.10.4/targets/rockchip/armv8/$FILE"
+          SDK_DIR=$(tar -I unzstd -tf "$FILE" | head -n 1 | cut -d/ -f1)
           tar -I unzstd -xf "$FILE"
-          mv immortalwrt-sdk-24.10.4-rockchip-armv8* sdk
+          mv "$SDK_DIR" sdk
 
       - name: Fix kernel version (hard lock to 6.6.110)
         run: |
@@ -50,4 +51,21 @@ jobs:
           cd sdk
           make package/kernel/kmod-amneziawg/compile V=s
           make package/amneziawg/compile V=s
-          make package/amnezia
+          make package/amneziawg-tools/compile V=s || true
+          make package/luci-proto-amneziawg/compile V=s || true
+
+      - name: Prepare release files
+        run: |
+          mkdir release
+          find sdk/bin/packages -name "*.ipk" -exec cp {} release/ \;
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: amneziawg-r3s-${{ github.run_number }}
+          name: "AmneziaWG for NanoPi R3S (build ${{ github.run_number }})"
+          draft: false
+          prerelease: false
+          files: release/*.ipk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
