@@ -1,4 +1,4 @@
-name: Build AmneziaWG for NanoPi R3S
+name: Build AmneziaWG via ImageBuilder
 
 on:
   workflow_dispatch:
@@ -11,30 +11,24 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Download ImmortalWrt snapshot SDK
+      - name: Download ImmortalWrt ImageBuilder
         run: |
-          wget https://downloads.immortalwrt.org/snapshots/targets/rockchip/armv8/immortalwrt-sdk-rockchip-armv8_gcc-12.3.0_musl.Linux-x86_64.tar.xz
-          tar -xf immortalwrt-sdk-rockchip-armv8_*.tar.xz
-          mv immortalwrt-sdk-rockchip-armv8* sdk
+          wget https://downloads.immortalwrt.org/releases/24.10.4/targets/rockchip/armv8/immortalwrt-imagebuilder-rockchip-armv8.Linux-x86_64.tar.xz
+          tar -xf immortalwrt-imagebuilder-rockchip-armv8*.tar.xz
+          mv immortalwrt-imagebuilder-rockchip-armv8* builder
 
       - name: Fix kernel version (hard lock to 6.6.110)
         run: |
-          sed -i 's/^\(LINUX_VERSION-6.6 =\).*/\1 6.6.110/' sdk/include/kernel-version.mk
-          sed -i 's/^\(LINUX_KERNEL_HASH-6.6.110 =\).*/\1 skip/' sdk/include/kernel-version.mk
+          sed -i 's/^\(LINUX_VERSION-6.6 =\).*/\1 6.6.110/' builder/include/kernel-version.mk
+          sed -i 's/^\(LINUX_KERNEL_HASH-6.6.110 =\).*/\1 skip/' builder/include/kernel-version.mk
 
-      - name: Copy AmneziaWG package
+      - name: Add AmneziaWG package
         run: |
-          cp -r package/amneziawg sdk/package/
-
-      - name: Update feeds
-        run: |
-          cd sdk
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
+          cp -r package/amneziawg builder/package/
 
       - name: Configure build
         run: |
-          cd sdk
+          cd builder
           echo "CONFIG_TARGET_rockchip=y" >> .config
           echo "CONFIG_TARGET_rockchip_armv8=y" >> .config
           echo "CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y" >> .config
@@ -44,10 +38,10 @@ jobs:
           echo "CONFIG_PACKAGE_luci-proto-amneziawg=y" >> .config
           make defconfig
 
-      - name: Build all AmneziaWG packages
+      - name: Build AmneziaWG packages
         run: |
-          cd sdk
-          make package/kernel/kmod-amneziawg/compile V=s
+          cd builder
+          make package/kmod-amneziawg/compile V=s
           make package/amneziawg/compile V=s
           make package/amneziawg-tools/compile V=s || true
           make package/luci-proto-amneziawg/compile V=s || true
@@ -55,7 +49,7 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir release
-          find sdk/bin/packages -name "*.ipk" -exec cp {} release/ \;
+          find builder/bin/packages -name "*.ipk" -exec cp {} release/ \;
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
