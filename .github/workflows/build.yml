@@ -11,19 +11,28 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Download kernel headers
+      - name: Download kernel headers and toolchain
         run: |
           BASE_URL="https://downloads.immortalwrt.org/releases/24.10.4/targets/rockchip/armv8/"
-          FILE="kernel-debug.tar.zst"
-          wget "${BASE_URL}${FILE}"
+          wget "${BASE_URL}kernel-debug.tar.zst"
+          wget "${BASE_URL}toolchain.tar.xz"
+
           mkdir kernel
-          tar -I unzstd -xf "$FILE" -C kernel
+          tar -I unzstd -xf kernel-debug.tar.zst -C kernel
+          mkdir toolchain
+          tar -xf toolchain.tar.xz -C toolchain
 
       - name: Build kmod-amneziawg
         run: |
-          make -C kernel M=$(pwd)/package/amneziawg/src \
+          export STAGING_DIR=$(pwd)/toolchain
+          export PATH=$STAGING_DIR/toolchain-arm_cortex-a55_gcc-13.3.0_musl/bin:$PATH
+          export CROSS_COMPILE=aarch64-openwrt-linux-
+          export ARCH=arm64
+
+          make -C kernel \
             ARCH=arm64 \
             CROSS_COMPILE=aarch64-openwrt-linux- \
+            M=$(pwd)/package/amneziawg/src \
             modules
 
       - name: Package .ko into .ipk
@@ -46,4 +55,15 @@ jobs:
           tar -czf data.tar.gz -C ipk amneziawg.ko
           echo "2.0" > debian-binary
           mkdir release
-          ar r release/kmod-amneziawg_6.6.110-1_aarch64_generic.ipk debian-binary control.tar.gz data
+          ar r release/kmod-amneziawg_6.6.110-1_aarch64_generic.ipk debian-binary control.tar.gz data.tar.gz
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: kmod-amneziawg-${{ github.run_number }}
+          name: "kmod-amneziawg (kernel-debug build ${{ github.run_number }})"
+          draft: false
+          prerelease: false
+          files: release/*.ipk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
