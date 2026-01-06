@@ -1,4 +1,4 @@
-name: Build AmneziaWG for NanoPi R3S (SDK .zst, clean targets)
+name: Build AmneziaWG for NanoPi R3S (clean targets)
 
 on:
   workflow_dispatch:
@@ -34,12 +34,11 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Configure build (clean targets)
+      - name: Configure build (NanoPi R3S only)
         run: |
           cd sdk
-          make defconfig
-          ./scripts/diffconfig.sh > .config
-          sed -i '/CONFIG_TARGET_/d' .config
+          rm -f .config
+          touch .config
           echo "CONFIG_TARGET_rockchip=y" >> .config
           echo "CONFIG_TARGET_rockchip_armv8=y" >> .config
           echo "CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y" >> .config
