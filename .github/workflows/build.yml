@@ -1,4 +1,4 @@
-name: Build AmneziaWG for NanoPi R3S (clean targets)
+name: Build AmneziaWG via ImageBuilder (NanoPi R3S, zst)
 
 on:
   workflow_dispatch:
@@ -11,34 +11,34 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Download and extract ImmortalWrt SDK (.tar.zst)
+      - name: Download ImmortalWrt ImageBuilder (.tar.zst only)
         run: |
-          FILE="immortalwrt-sdk-24.10.4-rockchip-armv8_gcc-13.3.0_musl.Linux-x86_64.tar.zst"
-          wget "https://downloads.immortalwrt.org/releases/24.10.4/targets/rockchip/armv8/$FILE"
-          SDK_DIR=$(tar -I unzstd -tf "$FILE" | head -n 1 | cut -d/ -f1)
+          BASE_URL="https://downloads.immortalwrt.org/releases/24.10.4/targets/rockchip/armv8/"
+          curl -s $BASE_URL > listing.txt
+
+          # Ищем только .tar.zst
+          FILE=$(grep -o 'immortalwrt-imagebuilder-24.10.4-rockchip-armv8[^"]*\.tar\.zst' listing.txt | head -n 1)
+
+          if [ -z "$FILE" ]; then
+            echo "ERROR: .tar.zst ImageBuilder not found"
+            exit 1
+          fi
+
+          echo "Found ImageBuilder: $FILE"
+          wget "${BASE_URL}${FILE}"
+
+          # Распаковка строго через zstd
           tar -I unzstd -xf "$FILE"
-          mv "$SDK_DIR" sdk
 
-      - name: Fix kernel version (hard lock to 6.6.110)
-        run: |
-          sed -i 's/^\(LINUX_VERSION-6.6 =\).*/\1 6.6.110/' sdk/include/kernel-version.mk
-          sed -i 's/^\(LINUX_KERNEL_HASH-6.6.110 =\).*/\1 skip/' sdk/include/kernel-version.mk
+          mv immortalwrt-imagebuilder-24.10.4-rockchip-armv8* builder
 
-      - name: Copy AmneziaWG package
+      - name: Add AmneziaWG package
         run: |
-          cp -r package/amneziawg sdk/package/
+          cp -r package/amneziawg builder/package/
 
-      - name: Update feeds
+      - name: Configure ImageBuilder
         run: |
-          cd sdk
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
-
-      - name: Configure build (NanoPi R3S only)
-        run: |
-          cd sdk
-          rm -f .config
-          touch .config
+          cd builder
           echo "CONFIG_TARGET_rockchip=y" >> .config
           echo "CONFIG_TARGET_rockchip_armv8=y" >> .config
           echo "CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y" >> .config
@@ -50,22 +50,22 @@ jobs:
 
       - name: Build AmneziaWG packages
         run: |
-          cd sdk
-          make package/kernel/kmod-amneziawg/compile V=s
+          cd builder
+          make package/kmod-amneziawg/compile V=s
           make package/amneziawg/compile V=s
           make package/amneziawg-tools/compile V=s || true
           make package/luci-proto-amneziawg/compile V=s || true
 
-      - name: Prepare release files
+      - name: Collect .ipk files
         run: |
           mkdir release
-          find sdk/bin/packages -name "*.ipk" -exec cp {} release/ \;
+          find builder/bin/packages -name "*.ipk" -exec cp {} release/ \;
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: amneziawg-r3s-${{ github.run_number }}
-          name: "AmneziaWG for NanoPi R3S (build ${{ github.run_number }})"
+          name: "AmneziaWG for NanoPi R3S (ImageBuilder zst build ${{ github.run_number }})"
           draft: false
           prerelease: false
           files: release/*.ipk
