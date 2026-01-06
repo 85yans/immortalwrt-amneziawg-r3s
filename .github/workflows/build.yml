@@ -1,4 +1,4 @@
-name: Build AmneziaWG via ImageBuilder (NanoPi R3S)
+name: Build kmod-amneziawg via kernel-debug.tar.zst
 
 on:
   workflow_dispatch:
@@ -11,60 +11,39 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Download and extract ImmortalWrt ImageBuilder (.tar.zst)
+      - name: Download kernel headers
         run: |
           BASE_URL="https://downloads.immortalwrt.org/releases/24.10.4/targets/rockchip/armv8/"
-          curl -s $BASE_URL > listing.txt
-          FILE=$(grep -o 'immortalwrt-imagebuilder-24.10.4-rockchip-armv8[^"]*\.tar\.zst' listing.txt | head -n 1)
-
-          if [ -z "$FILE" ]; then
-            echo "ERROR: .tar.zst ImageBuilder not found"
-            exit 1
-          fi
-
-          echo "Found ImageBuilder: $FILE"
+          FILE="kernel-debug.tar.zst"
           wget "${BASE_URL}${FILE}"
+          mkdir kernel
+          tar -I unzstd -xf "$FILE" -C kernel
 
-          SDK_DIR=$(tar -I unzstd -tf "$FILE" | head -n 1 | cut -d/ -f1)
-          tar -I unzstd -xf "$FILE"
-          mv "$SDK_DIR" builder
-
-      - name: Add AmneziaWG package
+      - name: Build kmod-amneziawg
         run: |
-          cp -r package/amneziawg builder/package/
+          make -C kernel M=$(pwd)/package/amneziawg/src \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-openwrt-linux- \
+            modules
 
-      - name: Configure ImageBuilder
+      - name: Package .ko into .ipk
         run: |
-          cd builder
-          echo "CONFIG_TARGET_rockchip=y" >> .config
-          echo "CONFIG_TARGET_rockchip_armv8=y" >> .config
-          echo "CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y" >> .config
-          echo "CONFIG_PACKAGE_kmod-amneziawg=y" >> .config
-          echo "CONFIG_PACKAGE_amneziawg=y" >> .config
-          echo "CONFIG_PACKAGE_amneziawg-tools=y" >> .config
-          echo "CONFIG_PACKAGE_luci-proto-amneziawg=y" >> .config
-          make defconfig
-
-      - name: Build AmneziaWG packages
-        run: |
-          cd builder
-          make package/kmod-amneziawg/compile V=s
-          make package/amneziawg/compile V=s
-          make package/amneziawg-tools/compile V=s || true
-          make package/luci-proto-amneziawg/compile V=s || true
-
-      - name: Collect .ipk files
-        run: |
+          mkdir -p ipk/CONTROL
+          cp package/amneziawg/src/amneziawg.ko ipk/
+          echo "Package: kmod-amneziawg" > ipk/CONTROL/control
+          echo "Version: 6.6.110-1" >> ipk/CONTROL/control
+          echo "Architecture: aarch64_generic" >> ipk/CONTROL/control
+          echo "Description: AmneziaWG kernel module" >> ipk/CONTROL/control
+          echo "Maintainer: AmneziaVPN" >> ipk/CONTROL/control
+          echo "Section: kernel" >> ipk/CONTROL/control
+          echo "Priority: optional" >> ipk/CONTROL/control
+          echo "Installed-Size: 64" >> ipk/CONTROL/control
+          echo "Source: amneziawg-openwrt" >> ipk/CONTROL/control
+          echo "Depends: kernel (=6.6.110)" >> ipk/CONTROL/control
+          echo "License: MIT" >> ipk/CONTROL/control
+          echo "Homepage: https://github.com/amnezia-vpn/amneziawg-openwrt" >> ipk/CONTROL/control
+          tar -czf control.tar.gz -C ipk/CONTROL .
+          tar -czf data.tar.gz -C ipk amneziawg.ko
+          echo "2.0" > debian-binary
           mkdir release
-          find builder/bin/packages -name "*.ipk" -exec cp {} release/ \;
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: amneziawg-r3s-${{ github.run_number }}
-          name: "AmneziaWG for NanoPi R3S (ImageBuilder zst build ${{ github.run_number }})"
-          draft: false
-          prerelease: false
-          files: release/*.ipk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ar r release/kmod-amneziawg_6.6.110-1_aarch64_generic.ipk debian-binary control.tar.gz data
