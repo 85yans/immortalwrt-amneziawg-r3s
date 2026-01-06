@@ -1,4 +1,4 @@
-name: Build AmneziaWG via ImageBuilder (NanoPi R3S, zst)
+name: Build AmneziaWG via ImageBuilder (NanoPi R3S)
 
 on:
   workflow_dispatch:
@@ -11,12 +11,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Download ImmortalWrt ImageBuilder (.tar.zst only)
+      - name: Download and extract ImmortalWrt ImageBuilder (.tar.zst)
         run: |
           BASE_URL="https://downloads.immortalwrt.org/releases/24.10.4/targets/rockchip/armv8/"
           curl -s $BASE_URL > listing.txt
-
-          # Ищем только .tar.zst
           FILE=$(grep -o 'immortalwrt-imagebuilder-24.10.4-rockchip-armv8[^"]*\.tar\.zst' listing.txt | head -n 1)
 
           if [ -z "$FILE" ]; then
@@ -27,10 +25,9 @@ jobs:
           echo "Found ImageBuilder: $FILE"
           wget "${BASE_URL}${FILE}"
 
-          # Распаковка строго через zstd
+          SDK_DIR=$(tar -I unzstd -tf "$FILE" | head -n 1 | cut -d/ -f1)
           tar -I unzstd -xf "$FILE"
-
-          mv immortalwrt-imagebuilder-24.10.4-rockchip-armv8* builder
+          mv "$SDK_DIR" builder
 
       - name: Add AmneziaWG package
         run: |
